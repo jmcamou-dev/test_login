@@ -8,84 +8,77 @@
 </head>
 <body>
     <script>
+        const GAME_PEER_CODE = 'ChummyGamesColorGame';
+
         // ========================================
         // GLOBAL VARIABLES
         // ========================================
-        
-        const GAME_PEER_CODE = 'ChummyGamesAAA';
+
+        // +++ Game Views +++
+        // ++++++++++++++++++
         const VIEWS = {
+            
             // Login Views
             LOGIN: 'login',
             AFTER_LOGIN_WAIT: 'afterLoginWait',
+
             // Host Views
             HOST_GAME_MAIN: 'hostGameMain',
+
             // Player Views
             GAME_MAIN: 'gameMain',
             GAME_CHOOSE_COLOR: 'gameChooseColor'
         };
         
+        // +++ User Meta Data +++
+        // ++++++++++++++++++++++
         let peer = null;
         let connections = [];
         let isHost = false;
         let currentView = VIEWS.LOGIN;
         let playerId = Array.from({ length: 7 }, () => 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[Math.floor(Math.random() * 26)]).join('');
         let playerName = '';
+
+        // +++ Game Data +++
+        // +++++++++++++++++
         let gameData = {
+            
+            // Game Meta Data
             playerList: [],
             gameStarted: false,
-            // Game Info
+            hostInfo: {},
+
+            // Game Data
             squareColor: 'blue',
             currentTurnPlayerName: null
         };
+
+        // +++ User Player Defualt data +++
+        // ++++++++++++++++++++++++++++++++
         let defualtPlayerInfo = {
-            // Player Meta Info
+
+            // User Meta Data
             peerId: null,
             id: null,
             name: null,
             isHost: false,
             isVIP: false,
             connectedStatus: 'Connected',
-            // Player Game Info
+
+            // Player Game Data
             color: 'black',
             turnOrder: -1
         }
-        // Game start data
-        let playerAvalableColors = ['green','yellow','pink','red','blue','brown','orange','gray'];
+
+        // +++ Game starter data +++
+        // +++++++++++++++++++++++++
+        let playerAvalableColors = ['green','pink','red','blue','brown','orange','gray'];
 
         // ========================================
         // LOGIN FUNCTIONS
         // ========================================
-                
-        function createButton(text, color, clickHandler) {
-            const button = document.createElement('button');
-            button.textContent = text;
-            button.addEventListener('click', clickHandler);
-            
-            Object.assign(button.style, {
-                padding: '15px 30px',
-                backgroundColor: color,
-                color: 'white',
-                border: 'none',
-                borderRadius: '5px',
-                cursor: 'pointer',
-                margin: '5px',
-                fontSize: '16px',
-                fontWeight: 'bold',
-                transition: 'transform 0.2s ease'
-            });
-            
-            button.addEventListener('mouseenter', () => {
-                button.style.transform = 'scale(1.05)';
-            });
-            
-            button.addEventListener('mouseleave', () => {
-                button.style.transform = 'scale(1)';
-            });
-            
-            return button;
-        }
         
-        function createLoginView() {
+        function createView_Login() {
             clearBody();
             currentView = VIEWS.LOGIN;
             
@@ -131,239 +124,13 @@
             container.appendChild(joinButton);
             document.body.appendChild(container);
         }
-                
-        function handleHostClick() {
-            isHost = true;
-            updateStatus('Initializing host connection...', 'info');
-            
-            peer = new Peer(GAME_PEER_CODE);
-            
-            peer.on('open', (id) => {
-                updateStatus(`Hosting as: ${id} (waiting for players...)`, 'success');
-                let hostinfo = JSON.parse(JSON.stringify(defualtPlayerInfo));
-                hostinfo.peerId = id;
-                hostinfo.id = playerId;
-                hostinfo.name = 'HOST';
-                hostinfo.isHost = true;
-                gameData.playerList = [hostinfo];
-                // suffle avalable colors
-                playerAvalableColors = shuffleList(playerAvalableColors)
-                createHostAfterLoginWaitView();
-                createPlayerStatusDiv();
-            });
-            
-            peer.on('connection', handleNewConnection);
-            peer.on('error', (err) => {
-                updateStatus(`Error: ${err.message}`, 'error');
-            });
-        }
-
-        function handleNewConnection(connection) {
-            connections.push(connection);
-            updateStatus(`Hosting (${connections.length} player(s) connected)`, 'success');
-            
-            connection.on('data', receiveMessage);
-            connection.on('close', () => {
-                connections = connections.filter(c => c !== connection);
-                updateStatus(`Hosting (${connections.length} player(s) connected)`, 'success');
-                
-                // Set disconnected player in list
-                gameData.playerList.forEach(player => {
-                    if(!connections.some(conn => conn.peer === player.peerId)){
-                        player.connectedStatus = 'Disconnected'
-                    }
-                });
-                
-                // Refresh player status
-                updatePlayerStatusDiv();
-                // Refresh player status on player screens
-                sendMessage('updatePlayerStatus');
-            });
-        }
-        
-        function handleJoinClick() {
-            const nameInput = document.getElementById('nameInput');
-            playerName = nameInput.value.trim();
-            
-            if (!playerName) {
-                alert('Please enter your name first!');
-                return;
+               
+        function createView_ConnectionStatus(message, type = 'info') {
+            const statusDivOld = document.getElementById('statusDiv');
+            if(statusDivOld){
+                document.body.removeChild(statusDivOld);
             }
-            
-            isHost = false;
-            updateStatus('Connecting to host...', 'info');
-            
-            peer = new Peer();
-            
-            peer.on('open', (id) => {
-                const connection = peer.connect(GAME_PEER_CODE);
-                
-                connection.on('open', () => {
-                    connections.push(connection);
-                    updateStatus(`Connected as: ${id}`, 'success');
-                    sendMessage('playerJoined', {
-                        peerId: id,
-                        playerId: playerId,
-                        playerName: playerName
-                    });
-                });
-                
-                connection.on('data', receiveMessage);
-                connection.on('close', () => {
-                    connections = connections.filter(c => c !== connection);
-                    updateStatus('Connection lost. Try reconnecting...', 'warning');
-                });
-                
-                connection.on('error', (err) => {
-                    updateStatus(`Connection failed: ${err.message}`, 'error');
-                });
-            });
-            
-            peer.on('error', (err) => {
-                updateStatus(`Error: ${err.message}`, 'error');
-            });
-        }
-        
-        function handleLoginHostMessage(message) {
-            switch (message.type) {
-                case 'updatePlayerStatus':
-                    updatePlayerStatusDiv();
-                    break;
-                
-                case 'moveToWaitRoom':
-                    // If new Player show wait view and player statuses
-                    if (message.data.targetPlayerId === playerId) {
-                        if(gameData.gameStarted){
-                            createGameMainView();
-                        }
-                        else{
-                            createAfterLoginWaitView();
-                        }
-                        createPlayerStatusDiv();
-                    }
-                    // If not new Player refresh player statuses
-                    else{
-                        if(!gameData.gameStarted){
-                            createAfterLoginWaitView();
-                        }
-                        updatePlayerStatusDiv();
-                    }
-                    break;
 
-                case 'gameStarted':
-                    // Move to game view when VIP starts the game
-                    createGameMainView();
-                    break;
-
-                case 'nameInUse':
-                    if (message.data.targetPlayerId === playerId) {
-                        alert('Name already in use! Please choose a different name.');
-                        createLoginView();
-                    }
-                    break;
-
-                case 'gameAlreadyStarted':
-                    if (message.data.targetPlayerId === playerId) {
-                        alert('Game has already started! You cannot join now.');
-                        createLoginView();
-                    }
-                    break;
-            }
-        }
-        
-        function handleLoginGuestMessage(message) {
-            switch (message.type) {
-                case 'playerJoined':
-                    const { peerId, playerId: newPlayerId, playerName } = message.data;
-                    
-                    // Check if name is already in use
-                    const connectedNameExists = gameData.playerList.some(player => 
-                        player.name === playerName && player.connectedStatus === 'Connected'
-                    );
-                    
-                    if (connectedNameExists) {
-                        sendMessage('nameInUse', { targetPlayerId: newPlayerId });
-                        // Disconnect the player
-                        setTimeout(() => {
-                        const connectionToRemove = connections.find(conn => conn.peer === peerId);
-                            if (connectionToRemove) {
-                                connectionToRemove.close();
-                            }
-                        }, 1000); // 1000 milliseconds = 1 second
-                        return;
-                    }
-                    
-                    // Add or update Disconnected player
-                    const disconnectedExistingPlayerIndex = gameData.playerList.findIndex(player => 
-                        player.name === playerName && player.connectedStatus === 'Disconnected'
-                    );
-                    
-                    if (disconnectedExistingPlayerIndex >= 0) {
-                        // Update disconnected existing player
-                        existPlayer = gameData.playerList[disconnectedExistingPlayerIndex]
-                        existPlayer.peerId = peerId,
-                        existPlayer.id = newPlayerId,
-                        existPlayer.connectedStatus = 'Connected'
-                    } else {
-                    
-                        // Check if game has already started
-                        if (gameData.gameStarted) {
-                            sendMessage('gameAlreadyStarted', { targetPlayerId: newPlayerId });
-                            // Disconnect the player
-                            setTimeout(() => {
-                            const connectionToRemove = connections.find(conn => conn.peer === peerId);
-                                if (connectionToRemove) {
-                                    connectionToRemove.close();
-                                }
-                            }, 1000); // 1000 milliseconds = 1 second
-                            return;
-                        }
-                        
-                        // Add new player - first non-host player becomes VIP
-                        const isFirstPlayer = gameData.playerList.filter(p => !p.isHost).length === 0;
-                        let newplayerinfo = JSON.parse(JSON.stringify(defualtPlayerInfo));
-                        newplayerinfo.peerId = peerId;
-                        newplayerinfo.id = newPlayerId;
-                        newplayerinfo.name = playerName;
-                        newplayerinfo.isVIP = isFirstPlayer;
-                        newplayerinfo.color = playerAvalableColors[gameData.playerList.filter(p => !p.isHost).length]
-                        gameData.playerList.push(newplayerinfo);
-                    }
-                    
-                    updatePlayerStatusDiv();
-                    sendMessage('moveToWaitRoom', { targetPlayerId: newPlayerId });
-                    break;
-
-                case 'startGame':
-                    // Only VIP can start the game
-                    const vipPlayer = gameData.playerList.find(p => p.isVIP && p.id === message.playerId);
-                    if (vipPlayer) {
-                        // Game started
-                        gameData.gameStarted = true;
-                        // Player turn order
-                        gameData.playerList = shuffleList(gameData.playerList);
-                        let trunNumber = 0;
-                        gameData.playerList.forEach(playerInfo => {
-                            if(!playerInfo.isHost){
-                                if(trunNumber == 0){
-                                    gameData.currentTurnPlayerName = playerInfo.name;
-                                }
-                                playerInfo.turnOrder = trunNumber;
-                                trunNumber+=1;
-                            }
-                        });
-                        createHostGameMainView();
-                        sendMessage('gameStarted');
-                    }
-                    break;
-            }
-        }
-
-        // ========================================
-        // STATUS DIV FUNCTIONS
-        // ========================================
-
-        function createStatusDiv() {
             const statusDiv = document.createElement('div');
             statusDiv.id = 'statusDiv';
             statusDiv.textContent = 'Choose to host or join';
@@ -381,11 +148,6 @@
                 fontSize: '14px'
             });
             
-            document.body.appendChild(statusDiv);
-        }
-
-        function updateStatus(message, type = 'info') {
-            const statusDiv = document.getElementById('statusDiv');
             statusDiv.textContent = message;
             
             const colors = {
@@ -400,9 +162,272 @@
                 backgroundColor: color.bg,
                 borderColor: color.border
             });
-        }
+
+            document.body.appendChild(statusDiv);
+
+            // Fades out the statusDiv over 1 second (1000ms)
+            fadeOut(statusDiv, 3000)
+        } 
+
+        function handleHostClick() {
+            isHost = true;
+            createView_ConnectionStatus('Initializing host connection...', 'info');
+            
+            peer = new Peer(GAME_PEER_CODE);
+            
+            peer.on('open', (id) => {
+                createView_ConnectionStatus(`Hosting as: ${id} (waiting for players...)`, 'success');
+
+                // --------------------------- TODO ---------------------------------------------------------------------------------------------
+                let hostinfo = JSON.parse(JSON.stringify(defualtPlayerInfo));
+                hostinfo.peerId = id;
+                hostinfo.id = playerId;
+                hostinfo.name = 'HOST';
+                hostinfo.isHost = true;
+                gameData.hostInfo = hostinfo;
+                // suffle avalable colors
+                playerAvalableColors = shuffleList(playerAvalableColors)
+                createView_AfterLoginWait(true);
+                createView_PlayerStatus();
+            });
+            
+            peer.on('connection', function (connection) {
+                connections.push(connection);
+                createView_ConnectionStatus(`Hosting (${connections.length} player(s) connected)`, 'success');
                 
-        function createPlayerStatusDiv() {
+                connection.on('data', receiveMessage);
+                connection.on('close', () => {
+                    connections = connections.filter(c => c !== connection);
+                    createView_ConnectionStatus(`Hosting (${connections.length} player(s) connected)`, 'success');
+
+                    // --------------------------- TODO ---------------------------------------------------------------------------------------------
+                    // Set player in list as disconnected
+                    gameData.playerList.forEach(player => {
+                        if(!connections.some(conn => conn.peer === player.peerId)){
+                            player.connectedStatus = 'Disconnected'
+                        }
+                    });
+                    createView_AfterLoginWait(false);
+                    // Refresh player status
+                    updateView_PlayerStatus();
+                    // Refresh player status on player screens
+                    sendMessage('updatePlayerStatus');
+                });
+            });
+            peer.on('error', (err) => {
+                createView_ConnectionStatus(`Error: ${err.message}`, 'error');
+            });
+        }
+        
+        function handleJoinClick() {
+            const nameInput = document.getElementById('nameInput');
+            playerName = nameInput.value.trim();
+            
+            if (!playerName) {
+                alert('Please enter your name first!');
+                return;
+            }
+            
+            isHost = false;
+            createView_ConnectionStatus('Connecting to host...', 'info');
+            
+            peer = new Peer();
+            
+            peer.on('open', (id) => {
+                const connection = peer.connect(GAME_PEER_CODE);
+                
+                connection.on('open', () => {
+                    connections.push(connection);
+                    createView_ConnectionStatus(`Connected as: ${id}`, 'success');
+                    sendMessage('playerJoined', {
+                        peerId: id,
+                        playerId: playerId,
+                        playerName: playerName
+                    });
+                });
+                
+                connection.on('data', receiveMessage);
+                connection.on('close', () => {
+                    connections = connections.filter(c => c !== connection);
+                    createView_ConnectionStatus('Connection lost. Try reconnecting...', 'warning');
+                });
+                
+                connection.on('error', (err) => {
+                    createView_ConnectionStatus(`Connection failed: ${err.message}`, 'error');
+                });
+            });
+            
+            peer.on('error', (err) => {
+                createView_ConnectionStatus(`Error: ${err.message}`, 'error');
+            });
+        }
+        
+        function handleLoginHostMessage(message) {
+            switch (message.type) {
+                case 'updatePlayerStatus':
+                    updateView_PlayerStatus();
+                    break;
+                
+                case 'moveToWaitRoom':
+                    // If new Player show wait view and player statuses
+                    if (message.data.targetPlayerId === playerId) {
+                        if(gameData.gameStarted){
+                            createView_GameMain(true);
+                        }
+                        else{
+                            createView_AfterLoginWait(true);
+                        }
+                        createView_TogglePlayerStatusView();
+                    }
+                    // If not new Player refresh player statuses
+                    else{
+                        if(!gameData.gameStarted){
+                            createView_AfterLoginWait(true);
+                        }
+                        updateView_PlayerStatus();
+                    }
+                    break;
+
+                case 'gameStarted':
+                    // Move to game view when VIP starts the game
+                    createView_GameMain(true);
+                    break;
+
+                case 'nameInUse':
+                    if (message.data.targetPlayerId === playerId) {
+                        alert('Name already in use! Please choose a different name.');
+                        createView_Login();
+                    }
+                    break;
+
+                case 'gameAlreadyStarted':
+                    if (message.data.targetPlayerId === playerId) {
+                        alert('Game has already started! You cannot join now.');
+                        createView_Login();
+                    }
+                    break;
+            }
+        }
+        
+        function handleLoginGuestMessage(message) {
+            switch (message.type) {
+                case 'playerJoined':
+                    const { peerId:newPeerId, playerId:newPlayerId, playerName:newPlayerName } = message.data;
+                    
+                    // (HOST LOGIN ACTION) Check if name is already in use by a connected user
+                    if (gameData.playerList.some(p => p.name === newPlayerName && p.connectedStatus === 'Connected')) {
+                        sendMessage('nameInUse', { targetPlayerId: newPlayerId });
+                        // Disconnect the player
+                        setTimeout(() => {
+                        const connectionToRemove = connections.find(conn => conn.peer === newPeerId);
+                            if (connectionToRemove) {
+                                connectionToRemove.close();
+                            }
+                        }, 1000); // 1000 milliseconds = 1 second
+                        return;
+                    }
+                    
+                    // (HOST LOGIN ACTION) Update disconnected existing player
+                    // Check if new connection is a disconnected player
+                    const disconnectedExistingPlayerIndex = gameData.playerList.findIndex(p => p.name === newPlayerName && p.connectedStatus === 'Disconnected');
+                    if (disconnectedExistingPlayerIndex >= 0) {
+                        existPlayer = gameData.playerList[disconnectedExistingPlayerIndex]
+                        existPlayer.peerId = newPeerId,
+                        existPlayer.id = newPlayerId,
+                        existPlayer.connectedStatus = 'Connected'
+                    } else {                    
+                        // (HOST LOGIN ACTION) New Player BUT game has already started
+                        if (gameData.gameStarted) {
+                            sendMessage('gameAlreadyStarted', { targetPlayerId: newPlayerId });
+                            // Disconnect the player
+                            setTimeout(() => {
+                            const connectionToRemove = connections.find(conn => conn.peer === newPeerId);
+                                if (connectionToRemove) {
+                                    connectionToRemove.close();
+                                }
+                            }, 1000); // 1000 milliseconds = 1 second
+                            return;
+                        }
+                        
+                        // (HOST LOGIN ACTION) Add new player - first non-host player becomes VIP
+                        let newplayerinfo = JSON.parse(JSON.stringify(defualtPlayerInfo));
+                        newplayerinfo.peerId = newPeerId;
+                        newplayerinfo.id = newPlayerId;
+                        newplayerinfo.name = newPlayerName;
+                        newplayerinfo.isVIP = gameData.playerList.length === 0;
+                        newplayerinfo.color = playerAvalableColors[gameData.playerList.length]
+                        gameData.playerList.push(newplayerinfo);
+                    }
+                    
+                    updateView_PlayerStatus();
+                    sendMessage('moveToWaitRoom', { targetPlayerId: newPlayerId });
+                    break;
+
+                case 'startGame':
+                    // Only VIP can start the game
+                    const playerIsVIP = gameData.playerList.find(p => p.isVIP && p.id === message.playerId);
+                    if (playerIsVIP) {
+                        // Game started
+                        gameData.gameStarted = true;
+                        // Set player turn order
+                        let turnOrderNumbers = [];
+                        gameData.playerList.forEach(element => {turnOrderNumbers.push(turnOrderNumbers.length)});
+                        turnOrderNumbers = shuffleList(turnOrderNumbers);
+                        let count = 0;
+                        gameData.playerList.forEach(playerInfo => {
+                            turnNumber = turnOrderNumbers[count];
+                            count += 1
+
+                            if(turnNumber == 0){
+                                gameData.currentTurnPlayerName = playerInfo.name;
+                            }
+                            playerInfo.turnOrder = turnNumber;
+                        });
+                        createView_HostGameMain(true);
+                        sendMessage('gameStarted');
+                    }
+                    break;
+            }
+        }
+
+        // ========================================
+        // PLAYER STATUS VIEW FUNCTIONS
+        // ========================================
+        
+        function createView_TogglePlayerStatusView(){
+            // Remove existing playerStatusDiv if it exists
+            const existingDiv = document.getElementById('togglePlayerStatusDiv');
+            if (existingDiv) {
+                document.body.removeChild(existingDiv);
+            }
+
+            const togglePlayerStatusDiv = document.createElement('div');
+            togglePlayerStatusDiv.id = 'togglePlayerStatusDiv';
+            
+            Object.assign(togglePlayerStatusDiv.style, {
+                position: 'fixed',
+                top: '20px',
+                left: '20px',
+                //transform: 'translateY(-50%)',
+                padding: '15px 20px',
+                backgroundColor: 'rgba(255, 255, 255, 0.3)',
+                border: '2px solid #ddd',
+                borderRadius: '10px',
+                //boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+                zIndex: '1000',
+                fontSize: '13px',
+            });
+
+            togglePlayerStatusDiv.addEventListener('click', function (){
+                document.body.removeChild(this);
+                createView_PlayerStatus();
+            })
+
+            togglePlayerStatusDiv.textContent = "👤 >";
+            document.body.appendChild(togglePlayerStatusDiv);
+        }
+        
+        function createView_PlayerStatus() {
             // Remove existing playerStatusDiv if it exists
             const existingDiv = document.getElementById('playerStatusDiv');
             if (existingDiv) {
@@ -414,9 +439,9 @@
             
             Object.assign(playerStatusDiv.style, {
                 position: 'fixed',
-                bottom: '20px',
-                left: '50%',
-                transform: 'translateX(-50%)',
+                top: '20px',
+                left: '20px',
+                //transform: 'translateY(-50%)',
                 padding: '15px 20px',
                 backgroundColor: 'rgba(255, 255, 255, 0.95)',
                 border: '2px solid #ddd',
@@ -428,50 +453,57 @@
                 minWidth: '300px'
             });
 
+            playerStatusDiv.addEventListener('click', function (){
+                document.body.removeChild(this);
+                createView_TogglePlayerStatusView();
+            })
+
             document.body.appendChild(playerStatusDiv);
-            updatePlayerStatusDiv();
+            updateView_PlayerStatus();
         }
 
-        function updatePlayerStatusDiv() {
+        function updateView_PlayerStatus() {
             const playerStatusDiv = document.getElementById('playerStatusDiv');
-            let statusText = '';
-            
-            // Current player info
-            if (isHost) {
-                statusText += '🏠 HOST SCREEN\n';
-            } else {
-                statusText += `👤 Player: ${playerName}\n`;
-            }
-            
-            statusText += '\nPlayers List:\n';
-            
-            // Show all players with their status
-            gameData.playerList.forEach(player => {
-                if(!player.isHost){
-                    let playerLine = '';
-                    
-                    if (player.isHost) {
-                        playerLine += '🏠 HOST';
-                    } else {
-                        playerLine += `• ${player.name}`;
-                        if (player.isVIP) {
-                            playerLine += ' (🌟VIP)';
-                        }
-                    }
-                    
-                    // Add connection status with emojis
-                    if (player.connectedStatus === 'Connected') {
-                        playerLine += ' 🟢';
-                    } else {
-                        playerLine += ' 🔴';
-                    }
-                    
-                    statusText += playerLine + '\n';
+            if(playerStatusDiv){
+                let statusText = '';
+                
+                // Current player info
+                if (isHost) {
+                    statusText += '🏠 HOST SCREEN\n';
+                } else {
+                    statusText += `👤 Player: ${playerName}\n`;
                 }
-            });
-            
-            playerStatusDiv.textContent = statusText;
-            playerStatusDiv.style.whiteSpace = 'pre-line';
+                
+                statusText += '\nPlayers List:\n';
+                
+                // Show all players with their status
+                gameData.playerList.forEach(player => {
+                    if(!player.isHost){
+                        let playerLine = '';
+                        
+                        if (player.isHost) {
+                            playerLine += '🏠 HOST';
+                        } else {
+                            playerLine += `• ${player.name}`;
+                            if (player.isVIP) {
+                                playerLine += ' (🌟VIP)';
+                            }
+                        }
+                        
+                        // Add connection status with emojis
+                        if (player.connectedStatus === 'Connected') {
+                            playerLine += ' 🟢';
+                        } else {
+                            playerLine += ' 🔴';
+                        }
+                        
+                        statusText += playerLine + '\n';
+                    }
+                });
+                
+                playerStatusDiv.textContent = statusText;
+                playerStatusDiv.style.whiteSpace = 'pre-line';
+            }
         }
 
         // ========================================
@@ -537,113 +569,153 @@
         function receiveMessage(message) {
             console.log(`Received: ${message.type}`, message);
             
+            // Message from HOST TO GUEST
             if (message.isHost && !isHost) {
-                // Message from host to guest
-                handleHostMessage(message);
-            } else if (!message.isHost && isHost) {
-                // Message from guest to host
-                handleGuestMessage(message);
+                gameData = message.gameData;
+                if(['updatePlayerStatus', 'moveToWaitRoom', 'gameStarted', 'nameInUse', 'gameAlreadyStarted'].includes(message.type)){
+                    // Login Message from host to guest
+                    handleLoginHostMessage(message);
+                }
+                else{
+                    // Message from host to guest
+                    handleHostMessage(message);
+                }
+            } 
+            // Message from GUEST TO HOST
+            else if (!message.isHost && isHost) {
+                if(['playerJoined', 'startGame'].includes(message.type)){
+                    // Login Message from guest to host
+                    handleLoginGuestMessage(message);
+                }
+                else{
+                    // Message from guest to host
+                    handleGuestMessage(message);
+                }
             }
+        }
+
+        function createButton(text, color, clickHandler) {
+            const button = document.createElement('button');
+            button.textContent = text;
+            button.addEventListener('click', clickHandler);
+            
+            Object.assign(button.style, {
+                padding: '15px 30px',
+                backgroundColor: color,
+                color: 'white',
+                border: 'none',
+                borderRadius: '5px',
+                cursor: 'pointer',
+                margin: '5px',
+                fontSize: '16px',
+                fontWeight: 'bold',
+                transition: 'transform 0.2s ease'
+            });
+            
+            button.addEventListener('mouseenter', () => {
+                button.style.transform = 'scale(1.05)';
+            });
+            
+            button.addEventListener('mouseleave', () => {
+                button.style.transform = 'scale(1)';
+            });
+            
+            return button;
+        }
+        
+        function fadeOut(element, duration) {
+            let opacity = 1; // Initial opacity
+            const interval = 50; // Interval time in ms
+            const decrement = interval / duration;
+
+            const fade = setInterval(() => {
+                opacity -= decrement;
+                if (opacity <= 0) {
+                    clearInterval(fade);
+                    element.style.display = "none"; // Hide the element
+                }
+                element.style.opacity = opacity;
+            }, interval);
         }
         
         // ========================================
         // AFTER LOGIN WAIT VIEW
         // ========================================
         
-        function createHostAfterLoginWaitView() {
-            clearBody();
-            currentView = VIEWS.AFTER_LOGIN_WAIT;
-            
-            const container = document.createElement('div');
-            Object.assign(container.style, {
-                textAlign: 'center',
-                padding: '30px',
-                backgroundColor: 'white',
-                borderRadius: '15px',
-                boxShadow: '0 6px 12px rgba(0, 0, 0, 0.1)',
-                minWidth: '400px',
-                marginBottom: '120px'
-            });
-            
-            // Title
-            const title = document.createElement('h2');
-            title.textContent = 'Waiting for Players...';
-            Object.assign(title.style, {
-                color: '#333',
-                marginBottom: '20px',
-                fontSize: '24px'
-            });
-            
-            // Instructions
-            const instructions = document.createElement('p');
-            Object.assign(instructions.style, {
-                color: '#666',
-                fontSize: '16px',
-                marginBottom: '30px',
-                lineHeight: '1.5'
-            });
-
-            instructions.textContent = 'Players are joining the game. The first player (VIP) will be able to start the game for everyone.';
-            
-            container.appendChild(title);
-            container.appendChild(instructions);
-
-            document.body.appendChild(container);
-        }
-
-        function createAfterLoginWaitView() {
-            clearBody();
-            currentView = VIEWS.AFTER_LOGIN_WAIT;
-            
-            const container = document.createElement('div');
-            Object.assign(container.style, {
-                textAlign: 'center',
-                padding: '30px',
-                backgroundColor: 'white',
-                borderRadius: '15px',
-                boxShadow: '0 6px 12px rgba(0, 0, 0, 0.1)',
-                minWidth: '400px',
-                marginBottom: '120px'
-            });
-            
-            // Title
-            const title = document.createElement('h2');
-            title.textContent = 'Waiting Room';
-            Object.assign(title.style, {
-                color: '#333',
-                marginBottom: '20px',
-                fontSize: '24px'
-            });
-            
-            // Instructions
-            const instructions = document.createElement('p');
-            Object.assign(instructions.style, {
-                color: '#666',
-                fontSize: '16px',
-                marginBottom: '30px',
-                lineHeight: '1.5'
-            });
-
-            const playerCount = gameData.playerList.filter(p => !p.isHost).length;
-            const isVIP = gameData.playerList.some(p => p.id === playerId && p.isVIP);
-            
-            if (isVIP) {
-                instructions.textContent = `You are the VIP! Need 1 or more players to start (currently ${playerCount}). Click "Start Game" when ready.`;
-            } else {
-                instructions.textContent = `Waiting for VIP to start the game... (currently ${playerCount} players)`;
-            }
-            
-            container.appendChild(title);
-            container.appendChild(instructions);
-
-            if (isVIP && playerCount >= 1) {
-                const startButton = createButton('🎮 Start Game', '#28a745', handleStartGameClick);
-                startButton.style.fontSize = '18px';
-                startButton.style.padding = '20px 40px';
-                container.appendChild(startButton);
+        function createView_AfterLoginWait(moveTo = true) {
+            if(!moveTo){
+                if(currentView == VIEWS.AFTER_LOGIN_WAIT){
+                    moveTo = true // ASKED TO UPDATE
+                }
             }
 
-            document.body.appendChild(container);
+            if(moveTo){
+                clearBody();
+                currentView = VIEWS.AFTER_LOGIN_WAIT;
+                
+                const container = document.createElement('div');
+                Object.assign(container.style, {
+                    textAlign: 'center',
+                    padding: '30px',
+                    backgroundColor: 'white',
+                    borderRadius: '15px',
+                    boxShadow: '0 6px 12px rgba(0, 0, 0, 0.1)',
+                    minWidth: '400px',
+                    marginBottom: '120px'
+                });
+                
+                // Title
+                const title = document.createElement('h2');
+                if(isHost){
+                    title.textContent = 'Waiting for Players...';
+                }
+                else{
+                    title.textContent = 'Waiting Room';
+                }
+                Object.assign(title.style, {
+                    color: '#333',
+                    marginBottom: '20px',
+                    fontSize: '24px'
+                });
+                
+                // Instructions
+                const instructions = document.createElement('p');
+                Object.assign(instructions.style, {
+                    color: '#666',
+                    fontSize: '16px',
+                    marginBottom: '30px',
+                    lineHeight: '1.5'
+                });
+
+                const playerCount = gameData.playerList.length;
+                const isVIP = gameData.playerList.some(p => p.id === playerId && p.isVIP);
+
+                if(isHost){
+                    instructions.textContent = `Players are joining the game (currently ${playerCount}). The first player (VIP) will be able to start the game for everyone.`;
+                }
+                else{
+
+                    if (isVIP) {
+                        instructions.textContent = `You are the VIP! Need 1 or more players to start (currently ${playerCount}). Click "Start Game" when ready.`;
+                    } else {
+                        instructions.textContent = `Waiting for VIP to start the game... (currently ${playerCount} players)`;
+                    }
+                }
+
+                container.appendChild(title);
+                container.appendChild(instructions);
+
+                if(!isHost){
+                    if(isVIP && playerCount >= 1) {
+                        const startButton = createButton('🎮 Start Game', '#28a745', handleStartGameClick);
+                        startButton.style.fontSize = '18px';
+                        startButton.style.padding = '20px 40px';
+                        container.appendChild(startButton);
+                    }
+                }
+
+                document.body.appendChild(container);
+            }
         }
 
         function handleStartGameClick() {
@@ -654,180 +726,204 @@
         // HOST VIEWS
         // ========================================
 
-        function createHostGameMainView() {
-            clearBody();
-            currentView = VIEWS.HOST_GAME_MAIN;
-            
-            const container = document.createElement('div');
-            Object.assign(container.style, {
-                textAlign: 'center',
-                padding: '20px',
-                backgroundColor: 'white',
-                borderRadius: '10px',
-                boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-                marginBottom: '120px' // Add margin to avoid overlap with bottom status
-            });
-            
-            // Game square
-            const square = document.createElement('div');
-            square.textContent = `(HOST) Current Turn: ${gameData.currentTurnPlayerName}`;
-            square.id = 'gameSquare';
-            
-            Object.assign(square.style, {
-                width: '200px',
-                height: '200px',
-                backgroundColor: gameData.squareColor,
-                margin: '0 auto 20px',
-                cursor: 'pointer',
-                border: '3px solid #333',
-                borderRadius: '8px',
-                transition: 'all 0.3s ease',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: 'white',
-                fontSize: '18px',
-                fontWeight: 'bold',
-                userSelect: 'none'
-            });
-            
-            // Square hover effects
-            square.addEventListener('mouseenter', () => {
-                square.style.transform = 'scale(1.05)';
-                square.style.boxShadow = '0 8px 16px rgba(0, 0, 0, 0.2)';
-            });
-            
-            square.addEventListener('mouseleave', () => {
-                square.style.transform = 'scale(1)';
-                square.style.boxShadow = 'none';
-            });
-            
-            square.addEventListener('click', handleSquareClick);
-            
-            container.appendChild(square);
-            document.body.appendChild(container);
+        function createView_HostGameMain(moveTo = true) {
+            if(!moveTo){
+                if(currentView == VIEWS.HOST_GAME_MAIN){
+                    moveTo = true // ASKED TO UPDATE
+                }
+            }
+
+            if(moveTo){
+                clearBody();
+                currentView = VIEWS.HOST_GAME_MAIN;
+                
+                const container = document.createElement('div');
+                Object.assign(container.style, {
+                    textAlign: 'center',
+                    padding: '20px',
+                    backgroundColor: 'white',
+                    borderRadius: '10px',
+                    boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+                    marginBottom: '120px' // Add margin to avoid overlap with bottom status
+                });
+                
+                // Game square
+                const square = document.createElement('div');
+                square.textContent = `(HOST) Current Turn: ${gameData.currentTurnPlayerName}`;
+                square.id = 'gameSquare';
+                
+                Object.assign(square.style, {
+                    width: '200px',
+                    height: '200px',
+                    backgroundColor: gameData.squareColor,
+                    margin: '0 auto 20px',
+                    cursor: 'pointer',
+                    border: '3px solid #333',
+                    borderRadius: '8px',
+                    transition: 'all 0.3s ease',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'white',
+                    fontSize: '18px',
+                    fontWeight: 'bold',
+                    userSelect: 'none'
+                });
+                
+                // Square hover effects
+                square.addEventListener('mouseenter', () => {
+                    square.style.transform = 'scale(1.05)';
+                    square.style.boxShadow = '0 8px 16px rgba(0, 0, 0, 0.2)';
+                });
+                
+                square.addEventListener('mouseleave', () => {
+                    square.style.transform = 'scale(1)';
+                    square.style.boxShadow = 'none';
+                });
+                
+                square.addEventListener('click', handleSquareClick);
+                
+                container.appendChild(square);
+                document.body.appendChild(container);
+            }
         }
         
         // ========================================
         //  PLAYER VIEWS
         // ========================================
 
-        function createGameMainView() {
-            // Elements not wanted to be destroyed - since this is a toggle element
-            let toggleShowColorButton = document.getElementById('toggleShowColorButton');
-
-            clearBody();
-            currentView = VIEWS.GAME_MAIN;
-            
-            const container = document.createElement('div');
-            Object.assign(container.style, {
-                textAlign: 'center',
-                padding: '20px',
-                backgroundColor: 'white',
-                borderRadius: '10px',
-                boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-                marginBottom: '120px' // Add margin to avoid overlap with bottom status
-            });
-
-            const currentTurn = gameData.playerList.some(p => p.id === playerId && p.name == gameData.currentTurnPlayerName);
-            
-            // Game square
-            const square = document.createElement('div');
-            if(currentTurn){
-                square.textContent = 'Click me!';
-            }
-            else{
-                square.textContent += `Current Turn: ${gameData.currentTurnPlayerName}`;
-            }
-            square.id = 'gameSquare';
-            
-            Object.assign(square.style, {
-                width: '200px',
-                height: '200px',
-                backgroundColor: gameData.squareColor,
-                margin: '0 auto 20px',
-                cursor: 'pointer',
-                border: '3px solid #333',
-                borderRadius: '8px',
-                transition: 'all 0.3s ease',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: 'white',
-                fontSize: '18px',
-                fontWeight: 'bold',
-                userSelect: 'none'
-            });
-            
-            // Square hover effects
-            square.addEventListener('mouseenter', () => {
-                square.style.transform = 'scale(1.05)';
-                square.style.boxShadow = '0 8px 16px rgba(0, 0, 0, 0.2)';
-            });
-            
-            square.addEventListener('mouseleave', () => {
-                square.style.transform = 'scale(1)';
-                square.style.boxShadow = 'none';
-            });
-
-            let createGameChooseColorViewButton = createButton('Choose Color', 'black', function (){createGameChooseColorView(); })
-
-            
-            if(currentTurn){
-                square.addEventListener('click', handleSquareClick); 
+        function createView_GameMain(moveTo = true) {
+            if(!moveTo){
+                if(currentView == VIEWS.GAME_MAIN){
+                    moveTo = true // ASKED TO UPDATE
+                }
             }
 
-            if(toggleShowColorButton){}
-            else{
-                toggleShowColorButton = createButton('Click to Show Color', 'black', function (){
-                        let toggleShowColorButton = document.getElementById('toggleShowColorButton');
-                        if(toggleShowColorButton){
-                            toggleShowColorButton.showing = !toggleShowColorButton.showing
-                            if(toggleShowColorButton.showing){
-                                toggleShowColorButton.textContent = 'Click to Hide';
-                                toggleShowColorButton.style.backgroundColor = gameData.playerList.filter(p => p.id == playerId)[0].color;
+            if(moveTo){
+                // Elements not wanted to be destroyed - since this is a toggle element
+                let toggleShowColorButton = document.getElementById('toggleShowColorButton');
+
+                clearBody();
+                currentView = VIEWS.GAME_MAIN;
+                
+                const container = document.createElement('div');
+                Object.assign(container.style, {
+                    textAlign: 'center',
+                    padding: '20px',
+                    backgroundColor: 'white',
+                    borderRadius: '10px',
+                    boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+                    marginBottom: '120px' // Add margin to avoid overlap with bottom status
+                });
+
+                const currentTurn = gameData.playerList.some(p => p.id === playerId && p.name == gameData.currentTurnPlayerName);
+                
+                // Game square
+                const square = document.createElement('div');
+                if(currentTurn){
+                    square.textContent = 'Click me!';
+                }
+                else{
+                    square.textContent += `Current Turn: ${gameData.currentTurnPlayerName}`;
+                }
+                square.id = 'gameSquare';
+                
+                Object.assign(square.style, {
+                    width: '200px',
+                    height: '200px',
+                    backgroundColor: gameData.squareColor,
+                    margin: '0 auto 20px',
+                    cursor: 'pointer',
+                    border: '3px solid #333',
+                    borderRadius: '8px',
+                    transition: 'all 0.3s ease',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'white',
+                    fontSize: '18px',
+                    fontWeight: 'bold',
+                    userSelect: 'none'
+                });
+                
+                // Square hover effects
+                square.addEventListener('mouseenter', () => {
+                    square.style.transform = 'scale(1.05)';
+                    square.style.boxShadow = '0 8px 16px rgba(0, 0, 0, 0.2)';
+                });
+                
+                square.addEventListener('mouseleave', () => {
+                    square.style.transform = 'scale(1)';
+                    square.style.boxShadow = 'none';
+                });
+
+                let createView_GameChooseColorButton = createButton('Choose Color', 'black', function (){createView_GameChooseColor(true); })
+
+                
+                if(currentTurn){
+                    square.addEventListener('click', handleSquareClick); 
+                }
+
+                if(toggleShowColorButton){}
+                else{
+                    toggleShowColorButton = createButton('Click to Show Color', 'black', function (){
+                            let toggleShowColorButton = document.getElementById('toggleShowColorButton');
+                            if(toggleShowColorButton){
+                                toggleShowColorButton.showing = !toggleShowColorButton.showing
+                                if(toggleShowColorButton.showing){
+                                    toggleShowColorButton.textContent = 'Click to Hide';
+                                    toggleShowColorButton.style.backgroundColor = gameData.playerList.filter(p => p.id == playerId)[0].color;
+                                }
+                                else{
+                                    toggleShowColorButton.textContent = 'Click to Show Color';
+                                    toggleShowColorButton.style.backgroundColor = 'black';
+                                }
                             }
-                            else{
-                                toggleShowColorButton.textContent = 'Click to Show Color';
-                                toggleShowColorButton.style.backgroundColor = 'black';
-                            }
-                        }
-                    })
-                toggleShowColorButton.id = 'toggleShowColorButton';
-                toggleShowColorButton.showing = false;
+                        })
+                    toggleShowColorButton.id = 'toggleShowColorButton';
+                    toggleShowColorButton.showing = false;
+                }
+                
+                container.appendChild(square);
+                container.appendChild(createView_GameChooseColorButton);
+                container.appendChild(toggleShowColorButton);
+                document.body.appendChild(container);
             }
-            
-            container.appendChild(square);
-            container.appendChild(createGameChooseColorViewButton);
-            container.appendChild(toggleShowColorButton);
-            document.body.appendChild(container);
         }
 
-        function createGameChooseColorView(){
-            clearBody();
-            currentView = VIEWS.GAME_CHOOSE_COLOR;
-            
-            const container = document.createElement('div');
-            Object.assign(container.style, {
-                textAlign: 'center',
-                padding: '20px',
-                backgroundColor: 'white',
-                borderRadius: '10px',
-                boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-                marginBottom: '120px' // Add margin to avoid overlap with bottom status
-            });
+        function createView_GameChooseColor(moveTo = true) {
+            if(!moveTo){
+                if(currentView == VIEWS.GAME_MAIN){
+                    moveTo = true // ASKED TO UPDATE
+                }
+            }
 
-            let createGameMainViewButton = createButton('Back To Main View', 'black', function () { createGameMainView(); });
-            createGameMainViewButton.style.alignItems = 'center';
-            container.appendChild(createGameMainViewButton);
-            playerAvalableColors.forEach(avalableColor => {
-                let button = createButton('Change your color to '+avalableColor, avalableColor, function () {sendMessage('requestChangeMyColor', {'newColor': avalableColor})});
-                button.style.alignItems = 'center';
-                container.appendChild(button);
-            });
+            if(moveTo){
+                clearBody();
+                currentView = VIEWS.GAME_CHOOSE_COLOR;
+                
+                const container = document.createElement('div');
+                Object.assign(container.style, {
+                    textAlign: 'center',
+                    padding: '20px',
+                    backgroundColor: 'white',
+                    borderRadius: '10px',
+                    boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+                    marginBottom: '120px' // Add margin to avoid overlap with bottom status
+                });
+
+                let createView_GameMainButton = createButton('Back To Main View', 'black', function () { createView_GameMain(true); });
+                createView_GameMainButton.style.alignItems = 'center';
+                container.appendChild(createView_GameMainButton);
+                playerAvalableColors.forEach(avalableColor => {
+                    let button = createButton('Change your color to '+avalableColor, avalableColor, function () {sendMessage('requestChangeMyColor', {'newColor': avalableColor})});
+                    button.style.alignItems = 'center';
+                    container.appendChild(button);
+                });
 
 
-            document.body.appendChild(container);
+                document.body.appendChild(container);
+            }
         }
         
         // ========================================
@@ -854,34 +950,13 @@
         // GAME MESSAGES
         // ========================================
 
-        function handleHostMessage(message) {
-            gameData = message.gameData;
-            
+        function handleHostMessage(message) {            
             switch (message.type) {
                 case 'playerColorChanged':
                     break;
                 case 'squareColorChanged':
                     // If gameSquare exist change it.
-                    if(currentView == VIEWS.GAME_MAIN){
-                        createGameMainView();
-                    }
-                    break;
-                
-                // ------------------------ LOGINSECTION ------------------------
-                case 'updatePlayerStatus':
-                    handleLoginHostMessage(message);
-                    break;
-                case 'moveToWaitRoom':
-                    handleLoginHostMessage(message);
-                    break;
-                case 'gameStarted':
-                    handleLoginHostMessage(message);
-                    break;
-                case 'nameInUse':
-                    handleLoginHostMessage(message);
-                    break;
-                case 'gameAlreadyStarted':
-                    handleLoginHostMessage(message);
+                    createView_GameMain(false);
                     break;
             }
         }
@@ -902,28 +977,13 @@
                         // If gameSquare exist in host view then change it
                         gameData.squareColor = message.data.playerColor;
 
-
-                        let newIndexTurn = gameData.playerList.filter(p => p.name == message.playerName)[0].turnOrder + 1;
-                        if(newIndexTurn == gameData.playerList.length-1){
-                            newIndexTurn = 0;
-                        }
-                        gameData.currentTurnPlayerName = gameData.playerList.filter(p => p.turnOrder == newIndexTurn)[0].name;
-
-
+                        // Set Next turn
+                        let newTurnNumber = (gameData.playerList.filter(p => p.name == gameData.currentTurnPlayerName)[0].turnOrder+1) % gameData.playerList.length;
+                        gameData.currentTurnPlayerName = gameData.playerList.filter(p => p.turnOrder == newTurnNumber)[0].name;
                         
-                        if(currentView == VIEWS.HOST_GAME_MAIN){
-                            createHostGameMainView();
-                        }
+                        createView_HostGameMain(false);
                         sendMessage('squareColorChanged');
                     }
-                    break;
-
-                // ------------------------ LOGINSECTION ------------------------
-                case 'playerJoined':
-                    handleLoginGuestMessage(message);
-                    break;
-                case 'startGame':
-                    handleLoginGuestMessage(message);
                     break;
             }
         }
@@ -934,8 +994,7 @@
         
         document.addEventListener('DOMContentLoaded', () => {
             applyBodyStyles();
-            createStatusDiv();
-            createLoginView();
+            createView_Login();
         });
     </script>
 </body>
