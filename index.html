@@ -213,7 +213,7 @@
                     // Refresh player status on player screens
                     sendMessage('updatePlayerStatus');
                 });
-                peer.on('disconnected', () => {
+                connection.on('disconnected', () => {
                     connections = connections.filter(c => c !== connection);
                     createView_ConnectionStatus(`Hosting (${connections.length} player(s) connected)`, 'success');
 
@@ -269,7 +269,7 @@
                     createView_ConnectionStatus('Connection lost. Try reconnecting...', 'warning');
                 });
                 
-                peer.on('disconnected', () => {
+                connection.on('disconnected', () => {
                     connections = connections.filter(c => c !== connection);
                     createView_ConnectionStatus('Connection lost. Try reconnecting...', 'warning');
                 });
@@ -490,7 +490,7 @@
                 
                 // Current player info
                 if (isHost) {
-                    statusText += '🏠 HOST SCREEN\n';
+                    statusText += '🏠 HOST SCREEN - v0.1\n';
                 } else {
                     statusText += `👤 Player: ${playerName}\n`;
                 }
