@@ -1017,19 +1017,21 @@
             applyBodyStyles();
             createView_Login();
 
-            // Assuming `peer` is your PeerJS instance
-            setInterval(() => {
-            for (const peerId in peer.connections) {
-                const connections = peer.connections[peerId];
-                connections.forEach((connection) => {
-                if (connection.open) {
-                    console.log(`Connection with ${peerId} is still active.`);
-                } else {
-                    console.log(`Connection with ${peerId} is no longer active.`);
-                }
-                });
-            }
-            }, 15000); // 15 seconds
+            // // Assuming `peer` is your PeerJS instance
+            // setInterval(() => {
+            //     if(peer){
+            //         for (const peerId in peer.connections) {
+            //             const connections = peer.connections[peerId];
+            //             connections.forEach((connection) => {
+            //             if (connection.open) {
+            //                 console.log(`Connection with ${peerId} is still active.`);
+            //             } else {
+            //                 console.log(`Connection with ${peerId} is no longer active.`);
+            //             }
+            //             });
+            //         }
+            //     }
+            // }, 15000); // 15 seconds
         });
     </script>
 </body>
