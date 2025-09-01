@@ -213,6 +213,23 @@
                     // Refresh player status on player screens
                     sendMessage('updatePlayerStatus');
                 });
+                peer.on('disconnected', () => {
+                    connections = connections.filter(c => c !== connection);
+                    createView_ConnectionStatus(`Hosting (${connections.length} player(s) connected)`, 'success');
+
+                    // --------------------------- TODO ---------------------------------------------------------------------------------------------
+                    // Set player in list as disconnected
+                    gameData.playerList.forEach(player => {
+                        if(!connections.some(conn => conn.peer === player.peerId)){
+                            player.connectedStatus = 'Disconnected'
+                        }
+                    });
+                    createView_AfterLoginWait(false);
+                    // Refresh player status
+                    updateView_PlayerStatus();
+                    // Refresh player status on player screens
+                    sendMessage('updatePlayerStatus');
+                });
             });
             peer.on('error', (err) => {
                 createView_ConnectionStatus(`Error: ${err.message}`, 'error');
@@ -252,6 +269,10 @@
                     createView_ConnectionStatus('Connection lost. Try reconnecting...', 'warning');
                 });
                 
+                peer.on('disconnected', () => {
+                    connections = connections.filter(c => c !== connection);
+                    createView_ConnectionStatus('Connection lost. Try reconnecting...', 'warning');
+                });
                 connection.on('error', (err) => {
                     createView_ConnectionStatus(`Connection failed: ${err.message}`, 'error');
                 });
