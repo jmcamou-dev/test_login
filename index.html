@@ -353,11 +353,17 @@
                         createView_Login();
                     }
                     break;
+                case 'YallStillHere':
+                    sendMessage('IAmHere')
+                    break;
             }
         }
         
         function handleLoginGuestMessage(message) {
             switch (message.type) {
+                case 'IAmHere':
+                    gameData.playerList.filter(p => p.id == message.playerId)[0].stillHere = true;
+                    break;
                 case 'playerJoined':
                     const { peerId:newPeerId, playerId:newPlayerId, playerName:newPlayerName } = message.data;
                     
@@ -619,7 +625,7 @@
             // Message from HOST TO GUEST
             if (message.isHost && !isHost) {
                 gameData = message.gameData;
-                if(['updatePlayerStatus', 'moveToWaitRoom', 'gameStarted', 'nameInUse', 'gameAlreadyStarted'].includes(message.type)){
+                if(['updatePlayerStatus', 'moveToWaitRoom', 'gameStarted', 'nameInUse', 'gameAlreadyStarted', 'YallStillHere'].includes(message.type)){
                     // Login Message from host to guest
                     handleLoginHostMessage(message);
                 }
@@ -630,7 +636,7 @@
             } 
             // Message from GUEST TO HOST
             else if (!message.isHost && isHost) {
-                if(['playerJoined', 'startGame'].includes(message.type)){
+                if(['playerJoined', 'startGame', 'IAmHere'].includes(message.type)){
                     // Login Message from guest to host
                     handleLoginGuestMessage(message);
                 }
@@ -1005,17 +1011,11 @@
                     // If gameSquare exist change it.
                     createView_GameMain(false);
                     break;
-                case 'YallStillHere':
-                    sendMessage('IAmHere')
-                    break;
             }
         }
         
         function handleGuestMessage(message) {
             switch (message.type) {
-                case 'IAmHere':
-                    gameData.playerList.filter(p => p.id == message.playerId)[0].stillHere = true;
-                    break;
                 case 'requestChangeMyColor':
                     console.log('Changed the color1')
                     if(!gameData.playerList.some(p => p.color === message.data.newColor)){
