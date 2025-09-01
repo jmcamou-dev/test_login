@@ -64,6 +64,7 @@
             isHost: false,
             isVIP: false,
             connectedStatus: 'Connected',
+            stillHere: true,
 
             // Player Game Data
             color: 'black',
@@ -189,6 +190,31 @@
                 playerAvalableColors = shuffleList(playerAvalableColors)
                 createView_AfterLoginWait(true);
                 createView_PlayerStatus();
+
+                
+
+                if(isHost){
+                    setInterval(() => {
+                        console.log("HELLO1")
+                        gameData.playerList.forEach(player => {
+                            player.stillHere = false
+                        });
+                        sendMessage('YallStillHere')
+                        const hello = setInterval(() => {
+                            console.log("HELLO2")
+                            
+                            
+                            gameData.playerList.forEach(player => {
+                                if(!player.stillHere){
+                                    console.log(player.name+' is missing')
+                                    connections.find(conn => conn.peer === player.peerId).close();
+                                }
+                            });
+
+                            clearInterval(hello);
+                        }, 10000); // 15 seconds
+                    }, 20000); // 15 seconds
+                }
             });
             
             peer.on('connection', function (connection) {
@@ -979,11 +1005,17 @@
                     // If gameSquare exist change it.
                     createView_GameMain(false);
                     break;
+                case 'YallStillHere':
+                    sendMessage('IAmHere')
+                    break;
             }
         }
         
         function handleGuestMessage(message) {
             switch (message.type) {
+                case 'IAmHere':
+                    gameData.playerList.filter(p => p.id == message.playerId)[0].stillHere = true;
+                    break;
                 case 'requestChangeMyColor':
                     console.log('Changed the color1')
                     if(!gameData.playerList.some(p => p.color === message.data.newColor)){
@@ -1016,22 +1048,6 @@
         document.addEventListener('DOMContentLoaded', () => {
             applyBodyStyles();
             createView_Login();
-
-            // // Assuming `peer` is your PeerJS instance
-            // setInterval(() => {
-            //     if(peer){
-            //         for (const peerId in peer.connections) {
-            //             const connections = peer.connections[peerId];
-            //             connections.forEach((connection) => {
-            //             if (connection.open) {
-            //                 console.log(`Connection with ${peerId} is still active.`);
-            //             } else {
-            //                 console.log(`Connection with ${peerId} is no longer active.`);
-            //             }
-            //             });
-            //         }
-            //     }
-            // }, 15000); // 15 seconds
         });
     </script>
 </body>
