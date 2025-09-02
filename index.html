@@ -32,40 +32,41 @@
         
         // +++ User Meta Data +++
         // ++++++++++++++++++++++
-        let peer = null;
-        let connections = [];
-        let isHost = false;
-        let currentView = VIEWS.LOGIN;
-        let playerId = Array.from({ length: 7 }, () => 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[Math.floor(Math.random() * 26)]).join('');
-        let playerName = '';
+        let networkData = {
+            peer: null,
+            connections: []
+        }
+        let userData = {
+            isHost: false,
+            // User Info
+            peerId: null,
+            id: Array.from({ length: 7 }, () => 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[Math.floor(Math.random() * 26)]).join(''),
+            name: '',
+            // Connection Info
+            connectedStatus: 'Connected',
+            stillHere: true,
+            // Game Meta Info
+            currentView: VIEWS.LOGIN,
+            isVIP: false,
+        }
 
         // +++ Game Data +++
         // +++++++++++++++++
         let gameData = {
             
             // Game Meta Data
-            playerList: [],
             gameStarted: false,
-            hostInfo: {},
+            playerList: [], // <-- [**userData,**playerData]
+            hostData: {},
 
             // Game Data
             squareColor: 'blue',
             currentTurnPlayerName: null
         };
 
-        // +++ User Player Defualt data +++
+        // +++ Player Defualt data +++
         // ++++++++++++++++++++++++++++++++
-        let defualtPlayerInfo = {
-
-            // User Meta Data
-            peerId: null,
-            id: null,
-            name: null,
-            isHost: false,
-            isVIP: false,
-            connectedStatus: 'Connected',
-            stillHere: true,
-
+        let defualtPlayerData = {
             // Player Game Data
             color: 'black',
             turnOrder: -1
@@ -73,15 +74,40 @@
 
         // +++ Game starter data +++
         // +++++++++++++++++++++++++
-        let playerAvalableColors = ['green','pink','red','blue','brown','orange','gray'];
-
+        let gameObjects = {
+            colors: shuffleList(['green','pink','red','blue','brown','orange','gray'])
+        }
+        
         // ========================================
         // LOGIN FUNCTIONS
         // ========================================
+
+        function startPingToCheckPlayerConnection(checkseconds = 30){
+            setInterval(() => {
+                console.log("HELLO1")
+                gameData.playerList.forEach(player => {
+                    player.stillHere = false
+                });
+                sendMessage('YallStillHere')
+                const hello = setInterval(() => {
+                    console.log("HELLO2")
+                    
+                    
+                    gameData.playerList.forEach(player => {
+                        if(!player.stillHere){
+                            console.log(player.name+' is missing')
+                            networkData.connections.find(conn => conn.peer === player.peerId).close();
+                        }
+                    });
+
+                    clearInterval(hello);
+                }, (checkseconds*1000)/2); 
+            }, (checkseconds*1000)); 
+        }
         
         function createView_Login() {
             clearBody();
-            currentView = VIEWS.LOGIN;
+            userData.currentView = VIEWS.LOGIN;
             
             const container = document.createElement('div');
             Object.assign(container.style, {
@@ -95,7 +121,7 @@
             
             // Title
             const title = document.createElement('h1');
-            title.textContent = 'Color Square Game - by ChummyGames - v0.2';
+            title.textContent = 'Color Square Game - by ChummyGames - v0.3';
             Object.assign(title.style, {
                 color: '#333',
                 marginBottom: '20px'
@@ -171,140 +197,73 @@
         } 
 
         function handleHostClick() {
-            isHost = true;
             createView_ConnectionStatus('Initializing host connection...', 'info');
-            
-            peer = new Peer(GAME_PEER_CODE);
-            
-            peer.on('open', (id) => {
+            networkData.peer = new Peer(GAME_PEER_CODE);
+            networkData.peer.on('open', (id) => {
                 createView_ConnectionStatus(`Hosting as: ${id} (waiting for players...)`, 'success');
-
                 // --------------------------- TODO ---------------------------------------------------------------------------------------------
-                let hostinfo = JSON.parse(JSON.stringify(defualtPlayerInfo));
-                hostinfo.peerId = id;
-                hostinfo.id = playerId;
-                hostinfo.name = 'HOST';
-                hostinfo.isHost = true;
-                gameData.hostInfo = hostinfo;
+                userData.isHost = true;
+                userData.peerId = id;
+                userData.name = 'HOST';
+                gameData.hostInfo = userData;
                 // suffle avalable colors
-                playerAvalableColors = shuffleList(playerAvalableColors)
                 createView_AfterLoginWait(true);
                 createView_PlayerStatus();
-
-                
-
-                if(isHost){
-                    setInterval(() => {
-                        console.log("HELLO1")
-                        gameData.playerList.forEach(player => {
-                            player.stillHere = false
-                        });
-                        sendMessage('YallStillHere')
-                        const hello = setInterval(() => {
-                            console.log("HELLO2")
-                            
-                            
-                            gameData.playerList.forEach(player => {
-                                if(!player.stillHere){
-                                    console.log(player.name+' is missing')
-                                    connections.find(conn => conn.peer === player.peerId).close();
-                                }
-                            });
-
-                            clearInterval(hello);
-                        }, 10000); // 15 seconds
-                    }, 20000); // 15 seconds
-                }
+                startPingToCheckPlayerConnection(30);
             });
-            
-            peer.on('connection', function (connection) {
-                connections.push(connection);
-                createView_ConnectionStatus(`Hosting (${connections.length} player(s) connected)`, 'success');
-                
+            networkData.peer.on('connection', function (connection) {
+                networkData.connections.push(connection);
+                createView_ConnectionStatus(`Hosting (${networkData.connections.length} player(s) connected)`, 'success');
                 connection.on('data', receiveMessage);
                 connection.on('close', () => {
-                    connections = connections.filter(c => c !== connection);
-                    createView_ConnectionStatus(`Hosting (${connections.length} player(s) connected)`, 'success');
-
+                    networkData.connections = networkData.connections.filter(c => c !== connection);
+                    createView_ConnectionStatus(`Hosting (${networkData.connections.length} player(s) connected)`, 'success');
                     // --------------------------- TODO ---------------------------------------------------------------------------------------------
-                    // Set player in list as disconnected
-                    gameData.playerList.forEach(player => {
-                        if(!connections.some(conn => conn.peer === player.peerId)){
-                            player.connectedStatus = 'Disconnected'
+                    // Set player without a connection as disconnected
+                    gameData.playerList.forEach(p => {
+                        if(!networkData.connections.some(conn => conn.peer === p.peerId)){
+                            console.log("HELLLOOWWW"+p.name)
+                            p.connectedStatus = 'Disconnected'
                         }
                     });
                     createView_AfterLoginWait(false);
-                    // Refresh player status
                     updateView_PlayerStatus();
-                    // Refresh player status on player screens
-                    sendMessage('updatePlayerStatus');
-                });
-                connection.on('disconnected', () => {
-                    connections = connections.filter(c => c !== connection);
-                    createView_ConnectionStatus(`Hosting (${connections.length} player(s) connected)`, 'success');
-
-                    // --------------------------- TODO ---------------------------------------------------------------------------------------------
-                    // Set player in list as disconnected
-                    gameData.playerList.forEach(player => {
-                        if(!connections.some(conn => conn.peer === player.peerId)){
-                            player.connectedStatus = 'Disconnected'
-                        }
-                    });
-                    createView_AfterLoginWait(false);
-                    // Refresh player status
-                    updateView_PlayerStatus();
-                    // Refresh player status on player screens
                     sendMessage('updatePlayerStatus');
                 });
             });
-            peer.on('error', (err) => {
+            networkData.peer.on('error', (err) => {
                 createView_ConnectionStatus(`Error: ${err.message}`, 'error');
             });
         }
         
         function handleJoinClick() {
             const nameInput = document.getElementById('nameInput');
-            playerName = nameInput.value.trim();
-            
-            if (!playerName) {
+            newName = nameInput.value.trim();
+            if (!newName) {
                 alert('Please enter your name first!');
                 return;
             }
-            
-            isHost = false;
             createView_ConnectionStatus('Connecting to host...', 'info');
-            
-            peer = new Peer();
-            
-            peer.on('open', (id) => {
-                const connection = peer.connect(GAME_PEER_CODE);
-                
+            networkData.peer = new Peer();
+            networkData.peer.on('open', (id) => {
+                const connection = networkData.peer.connect(GAME_PEER_CODE);
                 connection.on('open', () => {
-                    connections.push(connection);
+                    networkData.connections.push(connection);
                     createView_ConnectionStatus(`Connected as: ${id}`, 'success');
-                    sendMessage('playerJoined', {
-                        peerId: id,
-                        playerId: playerId,
-                        playerName: playerName
-                    });
+                    userData.name = newName;
+                    userData.peerId = id;
+                    sendMessage('playerJoined', {newUserData: userData});
                 });
-                
                 connection.on('data', receiveMessage);
                 connection.on('close', () => {
-                    connections = connections.filter(c => c !== connection);
-                    createView_ConnectionStatus('Connection lost. Try reconnecting...', 'warning');
-                });
-                
-                connection.on('disconnected', () => {
-                    connections = connections.filter(c => c !== connection);
+                    networkData.connections = networkData.connections.filter(c => c !== connection);
                     createView_ConnectionStatus('Connection lost. Try reconnecting...', 'warning');
                 });
                 connection.on('error', (err) => {
                     createView_ConnectionStatus(`Connection failed: ${err.message}`, 'error');
                 });
             });
-            
-            peer.on('error', (err) => {
+            networkData.peer.on('error', (err) => {
                 createView_ConnectionStatus(`Error: ${err.message}`, 'error');
             });
         }
@@ -317,7 +276,7 @@
                 
                 case 'moveToWaitRoom':
                     // If new Player show wait view and player statuses
-                    if (message.data.targetPlayerId === playerId) {
+                    if (message.data.targetPlayerId === userData.id) {
                         if(gameData.gameStarted){
                             createView_GameMain(true);
                         }
@@ -341,14 +300,14 @@
                     break;
 
                 case 'nameInUse':
-                    if (message.data.targetPlayerId === playerId) {
+                    if (message.data.targetPlayerId === userData.id) {
                         alert('Name already in use! Please choose a different name.');
                         createView_Login();
                     }
                     break;
 
                 case 'gameAlreadyStarted':
-                    if (message.data.targetPlayerId === playerId) {
+                    if (message.data.targetPlayerId === userData.id) {
                         alert('Game has already started! You cannot join now.');
                         createView_Login();
                     }
@@ -362,17 +321,17 @@
         function handleLoginGuestMessage(message) {
             switch (message.type) {
                 case 'IAmHere':
-                    gameData.playerList.filter(p => p.id == message.playerId)[0].stillHere = true;
+                    gameData.playerList.filter(p => p.id == message.userData.id)[0].stillHere = true;
                     break;
                 case 'playerJoined':
-                    const { peerId:newPeerId, playerId:newPlayerId, playerName:newPlayerName } = message.data;
+                    const { newUserData } = message.data;
                     
                     // (HOST LOGIN ACTION) Check if name is already in use by a connected user
-                    if (gameData.playerList.some(p => p.name === newPlayerName && p.connectedStatus === 'Connected')) {
-                        sendMessage('nameInUse', { targetPlayerId: newPlayerId });
+                    if (gameData.playerList.some(p => p.name === newUserData.name && p.connectedStatus === 'Connected')) {
+                        sendMessage('nameInUse', { targetPlayerId: newUserData.id });
                         // Disconnect the player
                         setTimeout(() => {
-                        const connectionToRemove = connections.find(conn => conn.peer === newPeerId);
+                        const connectionToRemove = networkData.connections.find(conn => conn.peer === newUserData.peerId);
                             if (connectionToRemove) {
                                 connectionToRemove.close();
                             }
@@ -382,19 +341,19 @@
                     
                     // (HOST LOGIN ACTION) Update disconnected existing player
                     // Check if new connection is a disconnected player
-                    const disconnectedExistingPlayerIndex = gameData.playerList.findIndex(p => p.name === newPlayerName && p.connectedStatus === 'Disconnected');
+                    const disconnectedExistingPlayerIndex = gameData.playerList.findIndex(p => p.name === newUserData.name && p.connectedStatus === 'Disconnected');
                     if (disconnectedExistingPlayerIndex >= 0) {
                         existPlayer = gameData.playerList[disconnectedExistingPlayerIndex]
-                        existPlayer.peerId = newPeerId,
-                        existPlayer.id = newPlayerId,
+                        existPlayer.peerId = newUserData.peerId,
+                        existPlayer.id = newUserData.id,
                         existPlayer.connectedStatus = 'Connected'
                     } else {                    
                         // (HOST LOGIN ACTION) New Player BUT game has already started
                         if (gameData.gameStarted) {
-                            sendMessage('gameAlreadyStarted', { targetPlayerId: newPlayerId });
+                            sendMessage('gameAlreadyStarted', { targetPlayerId: newUserData.id });
                             // Disconnect the player
                             setTimeout(() => {
-                            const connectionToRemove = connections.find(conn => conn.peer === newPeerId);
+                            const connectionToRemove = networkData.connections.find(conn => conn.peer === newUserData.peerId);
                                 if (connectionToRemove) {
                                     connectionToRemove.close();
                                 }
@@ -403,22 +362,19 @@
                         }
                         
                         // (HOST LOGIN ACTION) Add new player - first non-host player becomes VIP
-                        let newplayerinfo = JSON.parse(JSON.stringify(defualtPlayerInfo));
-                        newplayerinfo.peerId = newPeerId;
-                        newplayerinfo.id = newPlayerId;
-                        newplayerinfo.name = newPlayerName;
-                        newplayerinfo.isVIP = gameData.playerList.length === 0;
-                        newplayerinfo.color = playerAvalableColors[gameData.playerList.length]
-                        gameData.playerList.push(newplayerinfo);
+                        Object.assign(newUserData, defualtPlayerData);
+                        newUserData.isVIP = gameData.playerList.length === 0;
+                        newUserData.color = gameObjects.colors[gameData.playerList.length]
+                        gameData.playerList.push(newUserData);
                     }
-                    
+                    createView_AfterLoginWait(false);
                     updateView_PlayerStatus();
-                    sendMessage('moveToWaitRoom', { targetPlayerId: newPlayerId });
+                    sendMessage('moveToWaitRoom', { targetPlayerId: newUserData.id });
                     break;
 
                 case 'startGame':
                     // Only VIP can start the game
-                    const playerIsVIP = gameData.playerList.find(p => p.isVIP && p.id === message.playerId);
+                    const playerIsVIP = gameData.playerList.find(p => p.isVIP && p.id === message.userData.id);
                     if (playerIsVIP) {
                         // Game started
                         gameData.gameStarted = true;
@@ -427,14 +383,14 @@
                         gameData.playerList.forEach(element => {turnOrderNumbers.push(turnOrderNumbers.length)});
                         turnOrderNumbers = shuffleList(turnOrderNumbers);
                         let count = 0;
-                        gameData.playerList.forEach(playerInfo => {
+                        gameData.playerList.forEach(p => {
                             turnNumber = turnOrderNumbers[count];
                             count += 1
 
                             if(turnNumber == 0){
-                                gameData.currentTurnPlayerName = playerInfo.name;
+                                gameData.currentTurnPlayerName = p.name;
                             }
-                            playerInfo.turnOrder = turnNumber;
+                            p.turnOrder = turnNumber;
                         });
                         createView_HostGameMain(true);
                         sendMessage('gameStarted');
@@ -521,37 +477,28 @@
                 let statusText = '';
                 
                 // Current player info
-                if (isHost) {
+                if (userData.isHost) {
                     statusText += '🏠 HOST SCREEN\n';
                 } else {
-                    statusText += `👤 Player: ${playerName}\n`;
+                    statusText += `👤 Player: ${userData.name}\n`;
                 }
                 
                 statusText += '\nPlayers List:\n';
                 
                 // Show all players with their status
                 gameData.playerList.forEach(player => {
-                    if(!player.isHost){
-                        let playerLine = '';
-                        
-                        if (player.isHost) {
-                            playerLine += '🏠 HOST';
-                        } else {
-                            playerLine += `• ${player.name}`;
-                            if (player.isVIP) {
-                                playerLine += ' (🌟VIP)';
-                            }
-                        }
-                        
-                        // Add connection status with emojis
-                        if (player.connectedStatus === 'Connected') {
-                            playerLine += ' 🟢';
-                        } else {
-                            playerLine += ' 🔴';
-                        }
-                        
-                        statusText += playerLine + '\n';
+                    let playerLine = '';
+                    playerLine += `• ${player.name}`;
+                    if (player.isVIP) {
+                        playerLine += ' (🌟VIP)';
                     }
+                    // Add connection status with emojis
+                    if (player.connectedStatus === 'Connected') {
+                        playerLine += ' 🟢';
+                    } else {
+                        playerLine += ' 🔴';
+                    }
+                    statusText += playerLine + '\n';
                 });
                 
                 playerStatusDiv.textContent = statusText;
@@ -603,16 +550,14 @@
         function sendMessage(type, data = {}) {
             const message = {
                 type: type,
-                playerId: playerId,
-                playerName: playerName,
-                isHost: isHost,
+                userData: userData,
                 gameData: gameData,
                 data: data
             };
             
             console.log(`Sending: ${type}`, message);
             
-            connections.forEach(connection => {
+            networkData.connections.forEach(connection => {
                 if (connection.open) {
                     connection.send(message);
                 }
@@ -623,7 +568,7 @@
             console.log(`Received: ${message.type}`, message);
             
             // Message from HOST TO GUEST
-            if (message.isHost && !isHost) {
+            if (message.userData.isHost && !userData.isHost) {
                 gameData = message.gameData;
                 if(['updatePlayerStatus', 'moveToWaitRoom', 'gameStarted', 'nameInUse', 'gameAlreadyStarted', 'YallStillHere'].includes(message.type)){
                     // Login Message from host to guest
@@ -635,14 +580,16 @@
                 }
             } 
             // Message from GUEST TO HOST
-            else if (!message.isHost && isHost) {
-                if(['playerJoined', 'startGame', 'IAmHere'].includes(message.type)){
-                    // Login Message from guest to host
-                    handleLoginGuestMessage(message);
-                }
-                else{
-                    // Message from guest to host
-                    handleGuestMessage(message);
+            else if (!message.userData.isHost && userData.isHost) {
+                if(gameData.playerList.filter(p => p.id == gameData.userData.id)[0].connectedStatus == 'Connected'){
+                    if(['playerJoined', 'startGame', 'IAmHere'].includes(message.type)){
+                        // Login Message from guest to host
+                        handleLoginGuestMessage(message);
+                    }
+                    else{
+                        // Message from guest to host
+                        handleGuestMessage(message);
+                    }
                 }
             }
         }
@@ -697,14 +644,14 @@
         
         function createView_AfterLoginWait(moveTo = true) {
             if(!moveTo){
-                if(currentView == VIEWS.AFTER_LOGIN_WAIT){
+                if(userData.currentView == VIEWS.AFTER_LOGIN_WAIT){
                     moveTo = true // ASKED TO UPDATE
                 }
             }
 
             if(moveTo){
                 clearBody();
-                currentView = VIEWS.AFTER_LOGIN_WAIT;
+                userData.currentView = VIEWS.AFTER_LOGIN_WAIT;
                 
                 const container = document.createElement('div');
                 Object.assign(container.style, {
@@ -719,7 +666,7 @@
                 
                 // Title
                 const title = document.createElement('h2');
-                if(isHost){
+                if(userData.isHost){
                     title.textContent = 'Waiting for Players...';
                 }
                 else{
@@ -741,9 +688,9 @@
                 });
 
                 const playerCount = gameData.playerList.length;
-                const isVIP = gameData.playerList.some(p => p.id === playerId && p.isVIP);
+                const isVIP = gameData.playerList.some(p => p.id === userData.id && p.isVIP);
 
-                if(isHost){
+                if(userData.isHost){
                     instructions.textContent = `Players are joining the game (currently ${playerCount}). The first player (VIP) will be able to start the game for everyone.`;
                 }
                 else{
@@ -758,7 +705,7 @@
                 container.appendChild(title);
                 container.appendChild(instructions);
 
-                if(!isHost){
+                if(!userData.isHost){
                     if(isVIP && playerCount >= 1) {
                         const startButton = createButton('🎮 Start Game', '#28a745', handleStartGameClick);
                         startButton.style.fontSize = '18px';
@@ -781,14 +728,14 @@
 
         function createView_HostGameMain(moveTo = true) {
             if(!moveTo){
-                if(currentView == VIEWS.HOST_GAME_MAIN){
+                if(userData.currentView == VIEWS.HOST_GAME_MAIN){
                     moveTo = true // ASKED TO UPDATE
                 }
             }
 
             if(moveTo){
                 clearBody();
-                currentView = VIEWS.HOST_GAME_MAIN;
+                userData.currentView = VIEWS.HOST_GAME_MAIN;
                 
                 const container = document.createElement('div');
                 Object.assign(container.style, {
@@ -847,7 +794,7 @@
 
         function createView_GameMain(moveTo = true) {
             if(!moveTo){
-                if(currentView == VIEWS.GAME_MAIN){
+                if(userData.currentView == VIEWS.GAME_MAIN){
                     moveTo = true // ASKED TO UPDATE
                 }
             }
@@ -857,7 +804,7 @@
                 let toggleShowColorButton = document.getElementById('toggleShowColorButton');
 
                 clearBody();
-                currentView = VIEWS.GAME_MAIN;
+                userData.currentView = VIEWS.GAME_MAIN;
                 
                 const container = document.createElement('div');
                 Object.assign(container.style, {
@@ -869,7 +816,7 @@
                     marginBottom: '120px' // Add margin to avoid overlap with bottom status
                 });
 
-                const currentTurn = gameData.playerList.some(p => p.id === playerId && p.name == gameData.currentTurnPlayerName);
+                const currentTurn = gameData.playerList.some(p => p.id === userData.id && p.name == gameData.currentTurnPlayerName);
                 
                 // Game square
                 const square = document.createElement('div');
@@ -925,7 +872,7 @@
                                 toggleShowColorButton.showing = !toggleShowColorButton.showing
                                 if(toggleShowColorButton.showing){
                                     toggleShowColorButton.textContent = 'Click to Hide';
-                                    toggleShowColorButton.style.backgroundColor = gameData.playerList.filter(p => p.id == playerId)[0].color;
+                                    toggleShowColorButton.style.backgroundColor = gameData.playerList.filter(p => p.id == userData.id)[0].color;
                                 }
                                 else{
                                     toggleShowColorButton.textContent = 'Click to Show Color';
@@ -946,14 +893,14 @@
 
         function createView_GameChooseColor(moveTo = true) {
             if(!moveTo){
-                if(currentView == VIEWS.GAME_MAIN){
+                if(userData.currentView == VIEWS.GAME_MAIN){
                     moveTo = true // ASKED TO UPDATE
                 }
             }
 
             if(moveTo){
                 clearBody();
-                currentView = VIEWS.GAME_CHOOSE_COLOR;
+                userData.currentView = VIEWS.GAME_CHOOSE_COLOR;
                 
                 const container = document.createElement('div');
                 Object.assign(container.style, {
@@ -968,7 +915,7 @@
                 let createView_GameMainButton = createButton('Back To Main View', 'black', function () { createView_GameMain(true); });
                 createView_GameMainButton.style.alignItems = 'center';
                 container.appendChild(createView_GameMainButton);
-                playerAvalableColors.forEach(avalableColor => {
+                gameObjects.colors.forEach(avalableColor => {
                     let button = createButton('Change your color to '+avalableColor, avalableColor, function () {sendMessage('requestChangeMyColor', {'newColor': avalableColor})});
                     button.style.alignItems = 'center';
                     container.appendChild(button);
@@ -984,7 +931,7 @@
         // ========================================
 
         function handleSquareClick() {
-            if (isHost) {
+            if (userData.isHost) {
                 // // Host changes color directly
                 // gameData.squareColor = gameData.squareColor === 'blue' ? 'red' : 'blue';
                 // const gameSquareDiv = document.getElementById('gameSquare');
@@ -993,7 +940,7 @@
                 // }
                 // sendMessage('squareColorChanged');
             } else {
-                const playerInfo = gameData.playerList.filter(p => p.id == playerId)[0];
+                const playerInfo = gameData.playerList.filter(p => p.id == userData.id)[0];
                 // Guest requests color change
                 sendMessage('requestSquareColorChange', {'playerColor': playerInfo.color});
             }
@@ -1020,13 +967,13 @@
                     console.log('Changed the color1')
                     if(!gameData.playerList.some(p => p.color === message.data.newColor)){
                         console.log('Changed the color2')
-                        gameData.playerList.filter(p => p.id == message.playerId)[0].color = message.data.newColor;
+                        gameData.playerList.filter(p => p.id == message.userData.id)[0].color = message.data.newColor;
                     }
                     sendMessage('playerColorChanged');
                     break;
 
                 case 'requestSquareColorChange':
-                    if(gameData.currentTurnPlayerName == message.playerName){
+                    if(gameData.currentTurnPlayerName == message.userData.name){
                         // If gameSquare exist in host view then change it
                         gameData.squareColor = message.data.playerColor;
 
