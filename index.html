@@ -525,10 +525,12 @@
         function clearBody() {
             const statusDiv = document.getElementById('statusDiv');
             const playerStatusDiv = document.getElementById('playerStatusDiv');
+            const togglePlayerStatusDiv = document.getElementById('togglePlayerStatusDiv');
+            
             const children = Array.from(document.body.children);
             
             children.forEach(child => {
-                if (child !== statusDiv && child !== playerStatusDiv) {
+                if (child !== statusDiv && child !== playerStatusDiv && child !== togglePlayerStatusDiv) {
                     document.body.removeChild(child);
                 }
             });
